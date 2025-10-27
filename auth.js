@@ -23,7 +23,7 @@ app.post("/v1/API/auth/register", async (req, res) => {
     }
 });
 
-// Login — returns JWT
+// Login 
 app.post('/v1/API/auth/login', (req, res) => {
     const body = req.body || {};
     const { email, password } = body;
@@ -45,10 +45,8 @@ app.post('/v1/API/auth/login', (req, res) => {
                 const secret = process.env.JWT_SECRET;
                 const token = jwt.sign(payload, secret, { expiresIn: '1h' });
 
-                // Don't send password back
                 const { password: _, ...userSafe } = user;
 
-                // Otherwise, return JSON (API clients)
                 return res.status(200).json({ message: 'Login successful', token, user: userSafe });
             } else {
                 return sendError(res, 401, 'Invalid credentials');
@@ -59,7 +57,7 @@ app.post('/v1/API/auth/login', (req, res) => {
     });
 });
 
-// Middleware to verify JWT
+//verify JWT
 function verifyToken(req, res, next) {
     const authHeader = req.headers['authorization'] || req.headers['Authorization'];
     if (!authHeader) return sendError(res, 401, 'Missing Authorization header');
@@ -84,7 +82,7 @@ app.get('/', (req, res) => {
     res.send('server is running');
 });
 
-// Protected route example
+// User route
 app.get('/v1/API/users', verifyToken, (req, res) => {
     const userId = req.user && req.user.id;
     if (!userId) return sendError(res, 400, 'Invalid token payload');
