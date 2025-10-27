@@ -2,7 +2,9 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "express": "^5.1.0",
-    "mysql": "^2.18.1"
+    "mysql": "^2.18.1",
+    "dotenv": "^16.0.0",
+    "jsonwebtoken": "^9.0.0"
   },
   "name": "project",
   "version": "1.0.0",

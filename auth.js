@@ -1,34 +1,39 @@
 const express = require("express");
 const bcrypt = require("bcrypt");
 const db = require("./db");
-
-const app = express();
+const jwt = require("jsonwebtoken");
+require('dotenv').config();
 
 app.use(express.json());
 
+// Register
 app.post("/v1/API/auth/register", async (req, res) => {
-    const { fname,lname,email,phone,address,password,dob } = req.body;
+    const { fname, lname, email, phone, address, password, dob } = req.body;
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         const query = 'INSERT INTO user(`first_name`, `last_name`, `email`, `phone`, `address`, `password`, `dob`) VALUES (?,?,?,?,?,?,?)';
-        db.query(query, [fname,lname, email,phone,address,hashedPassword,dob], (err, result) => {
-            if (err) throw err;
-            res.status(201).send('User registered successfully');
+        db.query(query, [fname, lname, email, phone, address, hashedPassword, dob], (err, result) => {
+            res.status(201).json({ message: 'User registered successfully', userId: result.insertId });
         });
-    }  catch (error) {
-        res.status(500).send("Error registering user");
+    } catch (error) {
+        console.error('Hashing error:', error);
+        sendError(res, 500, "Error registering user");
     }
 });
 
-// login
+// Login — returns JWT
 app.post('/v1/API/auth/login', (req, res) => {
-    const { email, password } = req.body;
+    const body = req.body || {};
+    const { email, password } = body;
 
     const query = 'SELECT * FROM user WHERE email = ?';
     db.query(query, [email], async (err, results) => {
-        if (err) throw err;
+        if (err) {
+            console.error('DB error on login:', err);
+            return sendError(res, 500, 'Database error');
+        }
 
         if (results.length > 0) {
             const user = results[0];
@@ -36,21 +41,68 @@ app.post('/v1/API/auth/login', (req, res) => {
             const isMatch = await bcrypt.compare(password, user.password);
 
             if (isMatch) {
-                res.status(200).send('Login successful');
+                const payload = { id: user.id, email: user.email };
+                const secret = process.env.JWT_SECRET;
+                const token = jwt.sign(payload, secret, { expiresIn: '1h' });
+
+                // Don't send password back
+                const { password: _, ...userSafe } = user;
+
+                // Otherwise, return JSON (API clients)
+                return res.status(200).json({ message: 'Login successful', token, user: userSafe });
             } else {
-                res.status(401).send('Invalid credentials');
+                return sendError(res, 401, 'Invalid credentials');
             }
         } else {
-            res.status(404).send('User not found');
+            return sendError(res, 404, 'User not found');
         }
     });
 });
 
+// Middleware to verify JWT
+function verifyToken(req, res, next) {
+    const authHeader = req.headers['authorization'] || req.headers['Authorization'];
+    if (!authHeader) return sendError(res, 401, 'Missing Authorization header');
+
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') return sendError(res, 401, 'Invalid Authorization format');
+
+    const token = parts[1];
+    const secret = process.env.JWT_SECRET;
+
+    jwt.verify(token, secret, (err, decoded) => {
+        if (err) {
+            console.error('JWT verify error:', err);
+            return sendError(res, 401, 'Invalid or expired token');
+        }
+        req.user = decoded;
+        next();
+    });
+}
+
 app.get('/', (req, res) => {
-    res.send('server is running on port 3000');
+    res.send('server is running');
 });
 
+// Protected route example
+app.get('/v1/API/users', verifyToken, (req, res) => {
+    const userId = req.user && req.user.id;
+    if (!userId) return sendError(res, 400, 'Invalid token payload');
+
+    const query = 'SELECT id, first_name, last_name, email, phone, address, dob FROM user WHERE id = ?';
+    db.query(query, [userId], (err, results) => {
+        if (err) {
+            console.error('DB error on profile:', err);
+            return sendError(res, 500, 'Database error');
+        }
+        if (results.length === 0) return sendError(res, 404, 'User not found');
+        res.json({ user: results[0] });
+    });
+});
+
+
+const PORT = 3001;
 app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost3000`);
+    console.log(`Server is running on http://localhost:${PORT}`);
 });
 
